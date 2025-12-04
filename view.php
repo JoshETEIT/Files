@@ -1,60 +1,25 @@
 <?php
-$code = $_GET['code'] ?? '';
-$imagesBase = __DIR__ . "/images/";
+session_start();
 
-// ------------------------------------------------------
-// 1. Admin upload form
-// ------------------------------------------------------
-if ($code === '1337') {
-    ?>
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Create Album</title>
-        <style>
-            body { font-family: Arial; background: #fafafa; padding: 40px; }
-            .box { background: white; padding: 20px; max-width: 500px; margin: auto; border-radius: 8px; }
-            input, button { padding: 10px; margin: 5px 0; width: 100%; }
-        </style>
-    </head>
-    <body>
+$code = $_SESSION['gallery_code'] ?? '';
 
-    <div class="box">
-        <h2>Create New Album</h2>
-
-        <form action="upload.php" method="post" enctype="multipart/form-data">
-            <label>Album Code:</label>
-            <input type="text" name="newcode" maxlength="10" required>
-
-            <label>Select Files:</label>
-            <input type="file" name="photos[]" multiple required>
-
-            <button type="submit">Upload</button>
-        </form>
-    </div>
-
-    </body>
-    </html>
-    <?php
+if ($code === '') {
+    header("Location: index.php");
     exit;
 }
 
-// ------------------------------------------------------
-// 2. Normal user: Load an album
-// ------------------------------------------------------
-$folder = $imagesBase . $code;
+$folder = __DIR__ . "/images/" . $code;
 
 if (!is_dir($folder)) {
-    echo "<h3 style='text-align:center;font-family:Arial;margin-top:40px;'>No files found for code: $code</h3>";
+    header("Location: index.php");
     exit;
 }
 
-// Get all files
 $files = array_diff(scandir($folder), ['.', '..']);
 
-// Separate images and other files
 $images = [];
 $otherFiles = [];
+
 foreach ($files as $file) {
     if (preg_match('/\.(jpg|jpeg|png|gif)$/i', $file)) {
         $images[] = $file;
@@ -66,83 +31,190 @@ foreach ($files as $file) {
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Gallery <?php echo htmlspecialchars($code); ?></title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 0; background: #fafafa; }
-        h1 { text-align: center; padding: 20px 0; margin: 0; font-size: 28px; }
+<title>Gallery</title>
+<style>
+    body { margin: 0; font-family: Arial; background: #fafafa; }
 
-        /* Image gallery (old style) */
-        .image-gallery {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-            gap: 12px;
-            padding: 20px;
-            max-width: 1200px;
-            margin: auto;
-        }
-        .image-gallery img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            border-radius: 8px;
-            cursor: pointer;
-        }
+    .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 15px;
+        padding: 20px;
+        max-width: 1300px;
+        margin: auto;
+    }
 
-        /* Other files gallery */
-.file-gallery {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 16px;
-    padding: 20px;
-    max-width: 1200px;
-    margin: auto;
-    text-align: center; /* center icons without a box */
+    .grid-item,
+    .file-item {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 1/1;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #eee;
+        transition: .25s;
+        cursor: pointer;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .grid-item:hover,
+    .file-item:hover {
+        transform: scale(1.05);
+    }
+
+    .grid-item img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        pointer-events: none;
+    }
+
+    .file-item {
+        background: #f8f8f8;
+        border: 1px solid #e2e2e2;
+        flex-direction: column;
+    }
+
+    .file-icon-box {
+        flex: 1;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 46px;
+    }
+
+    .filename {
+        background: white;
+        padding: 6px;
+        font-size: 13px;
+        text-align: center;
+        width: 100%;
+    }
+
+    /* Remove hyperlink styling from file items */
+.file-item a,
+.file-item a:link,
+.file-item a:visited,
+.file-item a:hover,
+.file-item a:active {
+    text-decoration: none;
+    color: inherit;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
 }
 
-.file-item {
-    cursor: pointer; /* just clickable, no box */
-}
 
-.file-item .icon {
-    font-size: 48px;
-}
+    /* Modal */
+    .modal {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.9);
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        z-index: 9999;
+    }
 
-.file-item .filename {
-    margin-top: 8px;
-    font-size: 14px;
-    word-wrap: break-word;
-}
+    .modal img {
+        max-width: 90vw;
+        max-height: 80vh;
+        border-radius: 8px;
+    }
 
-    </style>
+    .modal-close {
+        position: absolute;
+        top: 20px;
+        right: 30px;
+        font-size: 40px;
+        color: white;
+        cursor: pointer;
+    }
+
+    .modal-download-wrapper {
+        margin-top: 25px;
+        text-align: center;
+    }
+    .modal-download-wrapper a {
+        padding: 10px 25px;
+        background: white;
+        border-radius: 6px;
+        text-decoration: none;
+        color: black;
+        border: 1px solid #ccc;
+    }
+
+    .zip-btn {
+        display: block;
+        margin: 20px auto;
+        padding: 12px 25px;
+        width: 200px;
+        text-align: center;
+        background: black;
+        color: white;
+        border-radius: 6px;
+        text-decoration: none;
+        font-size: 15px;
+    }
+</style>
 </head>
 <body>
 
-<h1>Welcome <?php echo htmlspecialchars($code); ?></h1>
+<a class="zip-btn" href="download.php?code=<?= urlencode($code) ?>">Download ZIP</a>
 
-<?php
-// Display images
-if (!empty($images)) {
-    echo '<div class="image-gallery">';
-    foreach ($images as $file) {
-        $url = 'images/' . urlencode($code . '/' . $file);
-        echo '<a href="' . $url . '" download><img src="' . $url . '"></a>';
-    }
-    echo '</div>';
-}
+<div class="grid">
 
-// Display other files
-if (!empty($otherFiles)) {
-    echo '<div class="file-gallery">';
-    foreach ($otherFiles as $file) {
-        $url = 'images/' . urlencode($code . '/' . $file);
-        echo '<div class="file-item">';
-        echo '<a href="' . $url . '" download><div class="icon">📄</div></a>';
-        echo '<div class="filename">' . htmlspecialchars($file) . '</div>';
-        echo '</div>';
-    }
-    echo '</div>';
-}
-?>
+<?php foreach ($images as $img): ?>
+<div class="grid-item" data-img="images/<?= $code ?>/<?= urlencode($img) ?>">
+    <img src="images/<?= $code ?>/<?= urlencode($img) ?>">
+</div>
+<?php endforeach; ?>
+
+<?php foreach ($otherFiles as $file): ?>
+<div class="file-item">
+    <a href="images/<?= $code ?>/<?= urlencode($file) ?>" download>
+        <div class="file-icon-box">📄</div>
+        <div class="filename"><?= htmlspecialchars($file) ?></div>
+    </a>
+</div>
+<?php endforeach; ?>
+
+</div>
+
+
+<!-- Modal -->
+<div id="modal" class="modal">
+    <span id="closeModal" class="modal-close">&times;</span>
+
+    <img id="modalImg">
+
+    <div class="modal-download-wrapper">
+        <a id="modalDownload" href="#" download>Download</a>
+    </div>
+</div>
+
+<script>
+const modal = document.getElementById("modal");
+const modalImg = document.getElementById("modalImg");
+const modalDownload = document.getElementById("modalDownload");
+const closeModal = document.getElementById("closeModal");
+
+document.querySelectorAll(".grid-item").forEach(item => {
+    item.addEventListener("click", () => {
+        let src = item.getAttribute("data-img");
+        modalImg.src = src;
+        modalDownload.href = src;
+        modal.style.display = "flex";
+    });
+});
+
+closeModal.onclick = () => modal.style.display = "none";
+modal.onclick = e => { if (e.target === modal) modal.style.display = "none"; };
+</script>
 
 </body>
 </html>
